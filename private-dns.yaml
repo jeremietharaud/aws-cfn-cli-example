@@ -1,0 +1,23 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VPC: private DNS zone'
+Parameters:
+  Env:
+    Description: 'The name of the environment'
+    Type: String
+Resources:
+  HostedZone:
+    Type: 'AWS::Route53::HostedZone'
+    Properties:
+      HostedZoneConfig:
+        Comment: !Sub "Private DNS zone"
+      Name: !Sub '{{resolve:ssm:/private-dns/${Env}/domain_name:1}}'
+      VPCs:
+      - VPCId:
+          !Sub '{{resolve:ssm:/landing-zone/${Env}/vpc_id:1}}'
+        VPCRegion: !Ref 'AWS::Region'
+Outputs:
+  HostedZoneId:
+    Description: 'The ID of the hosted zone.'
+    Value: !Ref HostedZone
+    Export:
+      Name: !Sub '${AWS::StackName}:HostedZoneId'

@@ -1,0 +1,100 @@
+plan_defaults: &plan_defaults
+  docker:
+    - image: jeremietharaud/cfncli:1.0.7
+      environment:
+          AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+          AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+          AWS_REGION: ${AWS_REGION}
+  steps:
+    - checkout
+    - run:
+        name: Validate stack
+        command: |
+          echo Validate ${ENV} environment
+          cfncli --stack-file private-dns.yaml --name ${ENV}-private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --validate
+    - run:
+        name: Plan stack
+        command: |
+          echo Start plan of ${ENV} environment
+          cfncli --stack-file private-dns.yaml --name ${ENV}-private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --plan
+
+apply_defaults: &apply_defaults
+  docker:
+    - image: jeremietharaud/cfncli:1.0.7
+      environment:
+          AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+          AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+          AWS_REGION: ${AWS_REGION}
+  steps:
+    - checkout
+    - run:
+        name: cfncli deploy
+        command: |
+          echo Apply on ${ENV} environment
+          cfncli --stack-file private-dns.yaml --name ${ENV}-private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --apply
+
+destroy_defaults: &destroy_defaults
+  docker:
+    - image: jeremietharaud/cfncli:1.0.7
+      environment:
+          AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+          AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+          AWS_REGION: ${AWS_REGION}
+  steps:
+    - checkout
+    - run:
+        name: Destroy stack
+        command: |
+          echo Destroy ${ENV} environment
+          cfncli --stack-file private-dns.yaml --name ${ENV}-private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --destroy --auto-approve
+
+
+version: 2.1
+jobs:
+  plan-dev:
+    <<: *plan_defaults
+    environment:
+      ENV: dev
+  apply-dev:
+    <<: *apply_defaults
+    environment:
+      ENV: dev
+  destroy-dev:
+    <<: *destroy_defaults
+    environment:
+      ENV: dev
+
+workflows:
+  version: 2
+  deploy:
+    jobs:
+      - plan-dev:
+          filters:
+            branches:
+              only: [develop, master]
+      - request-confirmation-dev:
+          type: approval
+          requires:
+            - plan-dev
+          filters:
+            branches:
+              only: [develop, master]
+      - apply-dev:
+          filters:
+            branches:
+              only: [develop, master]
+          requires:
+            - request-confirmation-dev
+      - request-destroy-dev:
+          type: approval
+          requires:
+            - plan-dev
+          filters:
+            branches:
+              only: [develop, master]
+      - destroy-dev:
+          filters:
+            branches:
+              only: [develop, master]
+          requires:
+            - request-destroy-dev
