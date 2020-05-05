@@ -4,19 +4,17 @@ plan_defaults: &plan_defaults
       environment:
           AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
           AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-          AWS_REGION: ${AWS_REGION}
+          AWS_REGION: eu-west-3
   steps:
     - checkout
     - run:
         name: Validate stack
         command: |
-          echo Validate ${ENV} environment
-          cfncli --stack-file private-dns.yaml --name ${ENV}-private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --validate
+          cfncli --stack-file private-dns.yaml --region ${AWS_REGION} --validate
     - run:
         name: Plan stack
         command: |
-          echo Start plan of ${ENV} environment
-          cfncli --stack-file private-dns.yaml --name ${ENV}-private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --plan
+          cfncli --stack-file private-dns.yaml --name private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --plan
 
 apply_defaults: &apply_defaults
   docker:
@@ -28,10 +26,13 @@ apply_defaults: &apply_defaults
   steps:
     - checkout
     - run:
-        name: cfncli deploy
+        name: Deploy stack
         command: |
-          echo Apply on ${ENV} environment
-          cfncli --stack-file private-dns.yaml --name ${ENV}-private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --apply
+          cfncli --stack-file private-dns.yaml --name private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --apply
+    - run:
+        name: List stacks
+        command: |
+          cfncli --ls
 
 destroy_defaults: &destroy_defaults
   docker:
@@ -43,23 +44,26 @@ destroy_defaults: &destroy_defaults
   steps:
     - checkout
     - run:
+        name: Plan destruction of the stack
+        command: |
+          cfncli --stack-file private-dns.yaml --name private-dns --region ${AWS_REGION} --destroy
+    - run:
         name: Destroy stack
         command: |
-          echo Destroy ${ENV} environment
-          cfncli --stack-file private-dns.yaml --name ${ENV}-private-dns --var Env=${ENV} --tags Env=${ENV},stack=https://github.com/jeremietharaud/aws-cfn-cli-example --region ${AWS_REGION} --destroy --auto-approve
+          cfncli --stack-file private-dns.yaml --name private-dns --region ${AWS_REGION} --destroy --auto-approve
 
 
 version: 2.1
 jobs:
-  plan-dev:
+  plan:
     <<: *plan_defaults
     environment:
       ENV: dev
-  apply-dev:
+  apply:
     <<: *apply_defaults
     environment:
       ENV: dev
-  destroy-dev:
+  destroy:
     <<: *destroy_defaults
     environment:
       ENV: dev
@@ -68,33 +72,33 @@ workflows:
   version: 2
   deploy:
     jobs:
-      - plan-dev:
+      - plan:
           filters:
             branches:
               only: [develop, master]
-      - request-confirmation-dev:
+      - request-confirmation:
           type: approval
           requires:
-            - plan-dev
+            - plan
           filters:
             branches:
               only: [develop, master]
-      - apply-dev:
+      - apply:
           filters:
             branches:
               only: [develop, master]
           requires:
             - request-confirmation-dev
-      - request-destroy-dev:
+      - request-destroy-confirmation:
           type: approval
           requires:
-            - plan-dev
+            - plan
           filters:
             branches:
               only: [develop, master]
-      - destroy-dev:
+      - destroy:
           filters:
             branches:
               only: [develop, master]
           requires:
-            - request-destroy-dev
+            - request-destroy-confirmation
